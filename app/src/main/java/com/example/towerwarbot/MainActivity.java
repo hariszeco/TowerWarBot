@@ -8,6 +8,9 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+
 import rikka.shizuku.Shizuku;
 
 public class MainActivity extends Activity {
@@ -19,8 +22,8 @@ public class MainActivity extends Activity {
             if (requestCode == REQUEST_CODE) {
                 showMessage(
                     grantResult == PackageManager.PERMISSION_GRANTED
-                        ? "Shizuku povezan!"
-                        : "Shizuku dozvola nije odobrena"
+                    ? "Shizuku povezan!"
+                    : "Dozvola nije odobrena"
                 );
             }
         };
@@ -40,33 +43,71 @@ public class MainActivity extends Activity {
         Button connect = new Button(this);
         connect.setText("POVEZI SHIZUKU");
         layout.addView(connect);
-
         connect.setOnClickListener(v -> connectShizuku());
 
         Button test = new Button(this);
         test.setText("TEST VEZE");
         layout.addView(test);
-
         test.setOnClickListener(v -> {
-            if (hasShizukuPermission()) {
-                showMessage("Shizuku veza je spremna");
-            } else {
-                showMessage("Shizuku nije povezan");
-            }
+            showMessage(
+                hasShizukuPermission()
+                ? "Shizuku veza je spremna"
+                : "Shizuku nije povezan"
+            );
         });
 
+        Button tap = new Button(this);
+        tap.setText("TEST AUTOMATSKOG DODIRA");
+        layout.addView(tap);
+        tap.setOnClickListener(v -> testTap());
+
         setContentView(layout);
+    }
+
+    private void testTap() {
+        if (!hasShizukuPermission()) {
+            showMessage("Prvo povezi Shizuku");
+            return;
+        }
+
+        showMessage("Pokrecem test dodira");
+
+        new Thread(() -> {
+            try {
+                Process process = Shizuku.newProcess(
+                    new String[] {
+                        "sh", "-c", "input tap 300 500"
+                    },
+                    null,
+                    null
+                );
+
+                int result = process.waitFor();
+
+                runOnUiThread(() -> showMessage(
+                    result == 0
+                    ? "Dodir izvrsen!"
+                    : "Dodir nije uspio: " + result
+                ));
+
+                process.destroy();
+
+            } catch (Exception e) {
+                runOnUiThread(() ->
+                    showMessage("Greska: " + e.getMessage())
+                );
+            }
+        }).start();
     }
 
     private void connectShizuku() {
         try {
             if (!Shizuku.pingBinder()) {
-                showMessage("Pokreni Shizuku aplikaciju");
+                showMessage("Pokreni Shizuku");
                 return;
             }
 
-            if (Shizuku.checkSelfPermission()
-                    == PackageManager.PERMISSION_GRANTED) {
+            if (hasShizukuPermission()) {
                 showMessage("Shizuku je vec povezan");
                 return;
             }
@@ -82,7 +123,7 @@ public class MainActivity extends Activity {
         try {
             return Shizuku.pingBinder()
                 && Shizuku.checkSelfPermission()
-                    == PackageManager.PERMISSION_GRANTED;
+                == PackageManager.PERMISSION_GRANTED;
         } catch (Exception e) {
             return false;
         }
@@ -102,4 +143,3 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 }
-
