@@ -1,3 +1,4 @@
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
@@ -6,11 +7,17 @@ plugins {
 android {
     namespace 'com.example.towerwarbot'
     compileSdk 35
+
     defaultConfig {
         applicationId 'com.example.towerwarbot'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1-prototype'
+        versionCode 2
+        versionName '0.2-shizuku'
     }
+}
+
+dependencies {
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }
