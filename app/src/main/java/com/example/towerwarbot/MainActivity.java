@@ -2,14 +2,14 @@
 package com.example.towerwarbot;
 
 import android.app.Activity;
-import android.os.Bundle;
+import android.content.ComponentName;
 import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.Parcel;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.Toast;
-
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 
 import rikka.shizuku.Shizuku;
 
@@ -17,14 +17,53 @@ public class MainActivity extends Activity {
 
     private static final int REQUEST_CODE = 1001;
 
+    private IBinder tapService;
+    private boolean binding = false;
+
     private final Shizuku.OnRequestPermissionResultListener
-        permissionListener = (requestCode, grantResult) -> {
-            if (requestCode == REQUEST_CODE) {
-                showMessage(
-                    grantResult == PackageManager.PERMISSION_GRANTED
-                    ? "Shizuku povezan!"
-                    : "Dozvola nije odobrena"
-                );
+            permissionListener = (requestCode, result) -> {
+        if (requestCode == REQUEST_CODE) {
+            showMessage(
+                result == PackageManager.PERMISSION_GRANTED
+                ? "Shizuku povezan!"
+                : "Dozvola nije odobrena"
+            );
+        }
+    };
+
+    private final Shizuku.UserServiceArgs serviceArgs =
+        new Shizuku.UserServiceArgs(
+            new ComponentName(
+                "com.example.towerwarbot",
+                TapService.class.getName()
+            )
+        )
+        .daemon(false)
+        .processNameSuffix("tap_service")
+        .debuggable(false)
+        .version(1);
+
+    private final Shizuku.UserServiceConnection
+            serviceConnection =
+        new Shizuku.UserServiceConnection() {
+
+            @Override
+            public void onServiceConnected(
+                    ComponentName name,
+                    IBinder binder) {
+
+                tapService = binder;
+                binding = false;
+                showMessage("Servis za dodir povezan!");
+            }
+
+            @Override
+            public void onServiceDisconnected(
+                    ComponentName name) {
+
+                tapService = null;
+                binding = false;
+                showMessage("Servis za dodir prekinut");
             }
         };
 
@@ -48,13 +87,16 @@ public class MainActivity extends Activity {
         Button test = new Button(this);
         test.setText("TEST VEZE");
         layout.addView(test);
-        test.setOnClickListener(v -> {
-            showMessage(
-                hasShizukuPermission()
-                ? "Shizuku veza je spremna"
-                : "Shizuku nije povezan"
-            );
-        });
+        test.setOnClickListener(v -> showMessage(
+            hasShizukuPermission()
+            ? "Shizuku veza je spremna"
+            : "Shizuku nije povezan"
+        ));
+
+        Button service = new Button(this);
+        service.setText("POVEZI SERVIS ZA DODIR");
+        layout.addView(service);
+        service.setOnClickListener(v -> bindTapService());
 
         Button tap = new Button(this);
         tap.setText("TEST AUTOMATSKOG DODIRA");
@@ -64,25 +106,65 @@ public class MainActivity extends Activity {
         setContentView(layout);
     }
 
-    private void testTap() {
+    private void bindTapService() {
         if (!hasShizukuPermission()) {
             showMessage("Prvo povezi Shizuku");
             return;
         }
 
-        showMessage("Pokrecem test dodira");
+        if (tapService != null && tapService.isBinderAlive()) {
+            showMessage("Servis je vec povezan");
+            return;
+        }
+
+        if (binding) {
+            showMessage("Povezivanje je u toku");
+            return;
+        }
+
+        try {
+            binding = true;
+            Shizuku.bindUserService(
+                serviceArgs,
+                serviceConnection
+            );
+            showMessage("Povezujem servis...");
+        } catch (Exception e) {
+            binding = false;
+            showMessage("Greska: " + e.getMessage());
+        }
+    }
+
+    private void testTap() {
+        if (tapService == null ||
+                !tapService.isBinderAlive()) {
+            showMessage("Prvo povezi servis za dodir");
+            return;
+        }
 
         new Thread(() -> {
+            Parcel data = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+
             try {
-                Process process = Shizuku.newProcess(
-                    new String[] {
-                        "sh", "-c", "input tap 300 500"
-                    },
-                    null,
-                    null
+                data.writeInt(300);
+                data.writeInt(500);
+
+                boolean success = tapService.transact(
+                    TapService.TAP,
+                    data,
+                    reply,
+                    0
                 );
 
-                int result = process.waitFor();
+                if (!success) {
+                    throw new Exception(
+                        "Servis nije prihvatio komandu"
+                    );
+                }
+
+                reply.readException();
+                int result = reply.readInt();
 
                 runOnUiThread(() -> showMessage(
                     result == 0
@@ -90,12 +172,13 @@ public class MainActivity extends Activity {
                     : "Dodir nije uspio: " + result
                 ));
 
-                process.destroy();
-
             } catch (Exception e) {
-                runOnUiThread(() ->
-                    showMessage("Greska: " + e.getMessage())
-                );
+                runOnUiThread(() -> showMessage(
+                    "Greska: " + e.getMessage()
+                ));
+            } finally {
+                reply.recycle();
+                data.recycle();
             }
         }).start();
     }
@@ -131,7 +214,9 @@ public class MainActivity extends Activity {
 
     private void showMessage(String message) {
         Toast.makeText(
-            this, message, Toast.LENGTH_LONG
+            this,
+            message,
+            Toast.LENGTH_LONG
         ).show();
     }
 
@@ -140,6 +225,18 @@ public class MainActivity extends Activity {
         Shizuku.removeRequestPermissionResultListener(
             permissionListener
         );
+
+        if (tapService != null || binding) {
+            try {
+                Shizuku.unbindUserService(
+                    serviceArgs,
+                    serviceConnection,
+                    false
+                );
+            } catch (Exception ignored) {
+            }
+        }
+
         super.onDestroy();
     }
 }
