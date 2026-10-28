@@ -147,8 +147,8 @@ public class MainActivity extends Activity {
             Parcel reply = Parcel.obtain();
 
             try {
-                data.writeInt(300);
-                data.writeInt(500);
+                data.writeInt(100);
+                data.writeInt(100);
 
                 boolean success = tapService.transact(
                     TapService.TAP,
