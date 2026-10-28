@@ -3,6 +3,7 @@ package com.example.towerwarbot;
 
 import android.app.Activity;
 import android.content.ComponentName;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -43,9 +44,8 @@ public class MainActivity extends Activity {
         .debuggable(false)
         .version(1);
 
-    private final Shizuku.UserServiceConnection
-            serviceConnection =
-        new Shizuku.UserServiceConnection() {
+    private final ServiceConnection serviceConnection =
+        new ServiceConnection() {
 
             @Override
             public void onServiceConnected(
